@@ -1,0 +1,141 @@
+<?xml version="1.0" encoding="windows-1251" ?>
+<!--
+'*******************************************************************************
+' File database builder
+'*******************************************************************************
+-->
+<job id="prog_test_system">
+  <script language="VBScript" src="code\install_files.database.vbs"/>
+  <script language="VBScript" src="code\xml_functions.vbs"/>
+  <script language="VBScript" src="code\xml_functions.change.vbs"/>
+  <script language="VBScript">
+<![CDATA[
+'*******************************************************************************
+Option Explicit
+
+'-------------------------------------------------------------------------
+if(wscript.arguments.length<>1)then
+ wscript.echo "Parameters: install_files_database.xml"
+
+ wscript.quit(1)
+end if
+
+'-------------------------------------------------------------------------
+'arguments
+
+dim c_arg__database_path
+c_arg__database_path=wscript.arguments.item(0)
+
+'-------------------------------------------------------------------------
+private g_fso
+private g_database
+
+set g_fso=createobject("Scripting.FileSystemObject")
+set g_database=new t_install_files_database
+
+'-------------------------------------------------------------------------
+call main()
+
+'*******************************************************************************
+private sub main()
+ wscript.echo "load database ["&c_arg__database_path&"]"
+
+ call g_database.load_from_file(c_arg__database_path)
+
+ call g_database.reset_exists()
+
+ call refresh_exists_state(g_database.root_dir,"",true)
+
+ call build_guids()
+
+ wscript.echo "save database ["&c_arg__database_path&"]"
+
+ call g_database.save_to_file(c_arg__database_path)
+end sub 'main
+
+'*******************************************************************************
+private function can_include(is_root,name)
+ if(not is_root)then
+  can_include=true
+  exit function
+ end if
+
+ can_include=g_database.can_include(name)
+end function 'can_include
+
+'*******************************************************************************
+private sub refresh_exists_state(dir,dir__path,is_root)
+ dim path
+
+ path=g_fso.BuildPath(g_database.source__path,dir__path)
+
+ wscript.echo "scan_dir: "&path
+
+ dim folder
+ set folder=g_fso.GetFolder(path)
+
+ dim x,items
+ set items=folder.files
+
+ dim file_obj
+
+ for each x in items
+  if(can_include(is_root,x.name))then
+   set file_obj=g_database.reg_file(dir.id,x.name)
+
+   wscript.echo " file: "&x.Path&" [dir_id:"&dir.id&", file_id:"&file_obj.id&"]"
+  end if 
+ next
+
+ set items=folder.subfolders
+
+ for each x in items
+  if(ignore_folder(x))then
+  elseif(not can_include(is_root,x.name))then
+  else
+   call refresh_exists_state(g_database.reg_dir(dir.id,x.name),g_fso.BuildPath(dir__path,x.name),false)
+  end if
+ next
+end sub 'refresh_exists_state
+
+'*******************************************************************************
+function ignore_folder(folder)
+ ignore_folder=true
+
+ if(ucase(folder.Name)="CVS")then
+  exit function
+ end if
+
+ ignore_folder=false
+end function 'ignore_folder
+
+'*******************************************************************************
+private sub build_guids()
+ wscript.echo "build guids"
+
+ dim targets
+ targets=g_database.targets
+
+ dim files
+ files=g_database.all_files
+
+ dim file
+ dim target
+ dim guid
+
+ for each file in files
+  if(file.exists)then
+   wscript.echo "File_ID: "&file.id
+   for each target in targets
+    guid=file.reg_guid(target)
+
+    wscript.echo " "&target&"="&guid
+   next
+  end if
+ next 'file
+end sub 'build_guids
+
+'*******************************************************************************
+]]>
+ </script>
+</job>

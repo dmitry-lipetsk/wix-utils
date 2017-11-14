@@ -1,0 +1,179 @@
+<?xml version="1.0" encoding="windows-1251" ?>
+<!--
+'*******************************************************************************
+' File database builder
+'*******************************************************************************
+-->
+<job id="prog_test_system">
+  <script language="VBScript" src="code\install_files.database.vbs"/>
+  <script language="VBScript" src="code\xml_functions.vbs"/>
+  <script language="VBScript" src="code\xml_functions.change.vbs"/>
+  <script language="VBScript">
+<![CDATA[
+'*******************************************************************************
+Option Explicit
+
+'-------------------------------------------------------------------------
+if(wscript.arguments.length<>3)then
+ wscript.echo "Parameters: sign install_files_database.xml dest_root_dir"
+ 
+ wscript.quit(1)
+end if
+
+'-------------------------------------------------------------------------
+const c_GuidDirPrefix="data__"
+
+'-------------------------------------------------------------------------
+'arguments
+
+private c_arg__sign
+private c_arg__database_path
+private c_arg__dest_root_dir
+
+c_arg__sign          =wscript.arguments.item(0)
+c_arg__database_path =wscript.arguments.item(1)
+c_arg__dest_root_dir =wscript.arguments.item(2)
+
+'-------------------------------------------------------------------------
+private g_fso
+set g_fso=createobject("Scripting.FileSystemObject")
+
+'-------------------------------------------------------------------------
+private g_database
+set g_database=new t_install_files_database
+
+'-------------------------------------------------------------------------
+private g_out__files
+private g_out__dirs
+private g_outs__guids
+
+set g_out__files=create_out()
+set g_out__dirs=create_out()
+set g_outs__guids=createobject("Scripting.Dictionary")
+
+call out(g_out__files,"")
+call out(g_out__files," <?include "&c_GuidDirPrefix&"$(var.V_BUILD_TARGET_SIGN)\cmp_"&c_arg__sign&"__guids.wxi ?>")
+call out(g_out__files,"")
+
+'-------------------------------------------------------------------------
+call main()
+
+'*******************************************************************************
+private sub main()
+ wscript.echo "load database ["&c_arg__database_path&"]"
+
+ call g_database.load_from_file(c_arg__database_path)
+
+ dim target
+ for each target in g_database.targets
+  call g_outs__guids.add(target,create_out())
+ next 'target
+ 
+ '-----------------------------------------------
+ stop
+
+ dim root_dir
+ set root_dir=g_database.get_root_dir()
+ 
+ if(not (root_dir is nothing))then
+  if(root_dir.exists)then
+   call walker(root_dir,"APPDIR__"&c_arg__sign,g_database.source__path," ")
+  end if 
+ end if
+ 
+ '-----------------------------------------------
+ call close_out(g_out__files, _
+                build_out_file_path("cmp_"&c_arg__sign&"__files.wxi"))
+
+ call close_out(g_out__dirs, _
+                build_out_file_path("cmp_"&c_arg__sign&"__dirs.wxi"))
+
+ for each target in g_outs__guids.keys
+  call close_out(g_outs__guids.item(target), _
+                 build_out_file_path(c_GuidDirPrefix&target&"\cmp_"&c_arg__sign&"__guids.wxi"))
+ next 'target
+end sub 'main
+
+'++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+private sub walker(dir,byval dirID,byval src_path,spaces)
+ dim items
+ dim x
+
+ items=dir.m_files.items
+
+ for each x in items
+  if(x.exists)then
+   call out_guids(x)
+
+   call out(g_out__files," <Component Id=""CMP__"&c_arg__sign&"__"&x.id&""" Guid=""$(var.vCMP__"&c_arg__sign&"__"&x.id&"__GUID)"" Directory="""&dirID&""">")
+
+   call out(g_out__files,"  <File Id=""FILE__"&c_arg__sign&"__"&x.id&""" DiskId=""1"" Source="""&src_path&"\"&x.Name&"""/>")
+
+   call out(g_out__files," </Component>")
+  end if 
+ next 'x
+
+ items=dir.m_dirs.items
+
+ for each x in items
+  if(x.exists)then
+   dirID="APPDIR__"&c_arg__sign&"__"&x.id
+
+   call out(g_out__dirs,spaces&"<Directory Id="""&dirID&""" Name="""&x.Name&""">")
+   call walker(x,dirID,g_fso.BuildPath(src_path,x.Name),spaces&" ")
+   call out(g_out__dirs,spaces&"</Directory>")
+  end if 
+ next 'x
+end sub
+
+'*******************************************************************************
+private function create_out()
+ dim x
+ set x=createobject("ADODB.Stream")
+
+ x.Charset="utf-8"
+
+ x.Open
+ 
+ call out(x,"<?xml version=""1.0"" encoding=""utf-8""?>")
+ call out(x,"<Include>")
+
+ set create_out=x
+end function 'create_out
+
+'*******************************************************************************
+private sub close_out(f,dest_file_name)
+ call out(f,"</Include>")
+
+ wscript.echo "write file: "&dest_file_name
+ 
+ call f.SaveToFile(dest_file_name,2)
+end sub 'close_out
+
+'*******************************************************************************
+private function build_out_file_path(part2)
+ build_out_file_path=g_fso.BuildPath(c_arg__dest_root_dir,part2)
+end function 'build_out_file_path
+
+'*******************************************************************************
+private sub out(f,text)
+ call f.WriteText(text,1) 
+end sub
+
+'++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+private sub out_guids(file)
+ dim target
+ dim guid
+ 
+ for each target in g_outs__guids.keys
+  guid=file.get_guid(target) 'throw
+
+  call out(g_outs__guids.item(target), _
+           "<?define vCMP__"&c_arg__sign&"__"&file.id&"__GUID="""&guid&""" ?>")
+ next 'target		   
+end sub 'out_guids
+
+'*******************************************************************************
+]]>
+ </script>
+</job>
